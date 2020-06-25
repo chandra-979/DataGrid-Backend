@@ -11,10 +11,6 @@ const Grid = require('gridfs-stream')
 const crypto = require('crypto')
 const nodemailer=require('nodemailer')
 const User = require('../models/model')
-const fd=require('./filedata');
-const fs=require('fs')
-const mime=require('mime')
-const emailExist=require('email-existence')
 const { ok } = require('assert');
 
 users.use(cors())

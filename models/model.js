@@ -20,13 +20,20 @@ const UserSchema = new Schema({
   data:[
     {
     filename:String,
-    bucketName:String
+    bucketName:String,
+    metadata:Object
     }
   ],
+  token:
+  {
+    data:String,
+    default:''
+  },
   date: {
     type: Date,
     default: Date.now
   }
+  
  
 })
 

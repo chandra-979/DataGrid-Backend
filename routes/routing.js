@@ -9,7 +9,13 @@ const multer = require('multer')
 const GridFsStorage = require('multer-gridfs-storage')
 const Grid = require('gridfs-stream')
 const crypto = require('crypto')
+const nodemailer=require('nodemailer')
 const User = require('../models/model')
+const fd=require('./filedata');
+const fs=require('fs')
+const mime=require('mime')
+const emailExist=require('email-existence')
+const { ok } = require('assert');
 
 users.use(cors())
 var id;
@@ -57,6 +63,7 @@ users.post('/register', (req, res) => {
     .catch(err => {
       res.send('error: ' + err)
     })
+  
 })
 
 users.post('/login', (req, res) => {
@@ -145,7 +152,8 @@ const storage = new GridFsStorage({
         const filename = buf.toString('hex') + path.extname(file.originalname);
         const fileInfo = {
           filename: filename,
-          bucketName: 'uploads'
+          metadata:{userId:decoded._id,OriginalName:file.originalname},
+          bucketName: 'uploads',
         };
         User.findByIdAndUpdate(decoded._id,
           {$push: {data: fileInfo}},
@@ -153,12 +161,10 @@ const storage = new GridFsStorage({
           function(err, doc) {
               if(err){
               console.log(err);
-              }else{
-              //do stuff
-              console.log(doc)
               }
           }
         );
+        console.log(fileInfo)
         resolve(fileInfo);
       });
     });
@@ -173,51 +179,37 @@ const upload = multer({ storage }).single("file");
   }); 
 });
 
-users.get("/files", (req, res) => {  
+users.post('/file',(req, res,) => {  
+
+  let fileName = req.body.filename;  
   
     MongoClient.connect('mongodb://localhost:27017', function(err, client){
         if(err){      
-         return res.json( 
-          {
-          title: 'Uploaded Error', 
-          message: 'MongoClient Connection error', error: err.errMsg}
-          );    
-          }    
-    const db = client.db("Mydb"); 
-    db.collection("users").find({email:"chandra@gmail.com"},{data:1}).toArray((err,doc)=>{
-        console.log(doc[0].data.forEach((e)=>{
-          console.log(e.filename)
-        }))
-    })
+          console.log(1)
+         res.sendStatus(403)
+             }    
+    const db = client.db('Mydb');
     const collection = db.collection('uploads.files');    
     const collectionChunks = db.collection('uploads.chunks');
-    collection.find({}).toArray(function(err, docs){        
+collection.find({filename: fileName}).toArray(function(err, docs){        
     if(err){        
-      return res.render('index', {
-       title: 'File error', 
-       message: 'Error finding file', 
-        error: err.errMsg});      
+      console.log(2)
+      res.sendStatus(403)      
     }
-  if(!docs || docs.length === 0){        
-    return res.render('index', {
-     title: 'Download Error', 
-     message: 'No file found'});      
+  if(!docs || docs.length === 0){ 
+    console.log(3)       
+    res.send("no files found")     
    }else{
   
    //Retrieving the chunks from the db          
-   collectionChunks.find({})
+   collectionChunks.find({files_id : docs[0]._id})
      .sort({n: 1}).toArray(function(err, chunks){          
        if(err){            
-          return res.render('index', {
-           title: 'Download Error', 
-           message: 'Error retrieving chunks', 
-           error: err.errmsg});          
+          res.sendStatus(403)          
         }
       if(!chunks || chunks.length === 0){            
         //No data found            
-        return res.render('index', {
-           title: 'Download Error', 
-           message: 'No data found'});          
+        res.sendStatus(403)        
       }
     
     let fileData = [];          
@@ -227,23 +219,158 @@ users.get("/files", (req, res) => {
      
       fileData.push(chunks[i].data.toString('base64'));          
     }
-   
-    f=[]
-     //Display the chunks using the data URI format  
-     docs.forEach((i)=>{   
-           
-     let finalFile = 'data:' + i.contentType + ';base64,' 
-          + fileData.join('');          
-      f.push(finalFile)
-     
-     })
     
-    res.json(f)
+     //Display the chunks using the data URI format          
+     let finalFile = 'data:' + docs[0].contentType + ';base64,' 
+          + fileData.join('');   
+    res.json(finalFile)
      });      
     }          
    });  
  });
- 
 });
+
+
+users.post("/delete",(req,res)=>{
+  if(req.headers.authorization.split(' ')[0]===null||req.headers.authorization.split(' ')[0]==='null'){
+    res.json({error:'User does not exist'})
+    return 
+  }
+ 
+var decoded = jwt.verify(req.headers.authorization.split(' ')[0], process.env.SECRET_KEY)
+
+  MongoClient.connect('mongodb://localhost:27017', function(err, client){
+        if(err){      
+         res.sendStatus(403)
+             } 
+
+    const db = client.db('Mydb');
+    const collection = db.collection('uploads.files');    
+    const collectionChunks = db.collection('uploads.chunks');
+collection.find({'metadata.OriginalName': req.body.filename}).toArray(function(err, docs){        
+    if(err){        
+      console.log(1)
+      res.sendStatus(403)      
+    }
+  if(!docs || docs.length === 0){   
+    console.log(2)     
+    res.sendStatus(403)     
+   }else{
+  console.log(1)
+   //Retrieving the chunks from the db          
+   collectionChunks.findOneAndDelete({files_id : docs[0]._id},(err,result)=>{
+     console.log(3)
+
+    collection.findOneAndDelete({'metadata.OriginalName': req.body.filename});
+    User.update({},{$pull:{'data':{'_id':req.body.id}}},(err,resu)=>{
+      console.log(resu)
+    });
+    res.json("deletion success")
+
+   })
+           
+    }          
+   });  
+ });
+
+})
+
+users.post('/download', (req, res) => {
+  // Check file exist on MongoDB
+  mongoose.connect('mongodb://localhost:27017/Mydb')
+  Grid.mongo=mongoose.mongo
+  var connection=mongoose.connection
+  connection.on('error',console.error.bind(console,'connection error:'))
+connection.once('open', () => {
+  // Init stream
+  gfs = Grid(connection.db);
+  gfs.collection('uploads')
+  var filename = req.body.filename;
+gfs.files.findOne({ filename: filename }, (err, file) => {
+  if (err || !file) {
+      res.status(404).send('File Not Found');
+return
+  } 
+let contentType=file.contentType;
+var readstream = gfs.createReadStream({ filename: filename });
+res.set('Content-Type', contentType)
+res.set('Content-Disposition', 'attachment; filename="' + file.filename + '"');
+readstream.on("error", function(err) { 
+  res.end();
+});
+readstream.pipe(res) 
+return ok("{}")
+}); 
+});
+});
+
+users.post('/forgotpassword', function(req, res) {
+
+  console.log(req.body.email)
+  
+  let token = jwt.sign({Email: req.body.email},
+      'chandra',
+      { 
+          expiresIn: '1h' 
+      }
+    );
+
+  
+   console.log('step 1')
+   
+      console.log('step 2')
+      var smtpTrans = nodemailer.createTransport({
+         service: 'Gmail', 
+         auth: {
+          user: 'chandra7799225680@gmail.com',
+          pass: 'Chandra@2911'
+        }
+      });
+
+      User.findOneAndUpdate({email:req.body.email},{$set:{token:token}},(err,result)=>{
+        if(err)
+        console.log('error occur in db')
+        else if(!result)
+        res.sendStatus(403).json('User Not Found')
+        else{
+          console.log(result)
+        console.log("token set to user model")
+        }
+    
+      })
+    
+      var mailOptions = {
+
+        to: req.body.email,
+        from: 'chandra7799225680@gmail.com',
+        subject: 'Node.js Password Reset',
+        text: 'You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n' +
+          'Please click on the following link, or paste this into your browser to complete the process:\n\n' +
+          'If you did not request this, please ignore this email and your password will remain unchanged.\n',
+        html:'<p>Click on below link to reset Your password</p><br><a  href="http://localhost:4200/reset/'+token+'">Reset My Password</a>'
+      };
+      console.log('step 3')
+      smtpTrans.sendMail(mailOptions, function(err) {
+      res.json({"message":"email sent to ur mail"})
+      console.log(' Email sent to Your mail')
+      console.log(token)
+});  
+});
+users.post('/resetpassword',(req,res)=>{
+  let decoded=jwt.decode(req.body.resettoken,'chandra')
+  User.find({email:decoded.Email},(err,result)=>{
+    if(result[0].email===decoded.Email)
+    {
+      User.findOneAndUpdate({email:decoded.Email},{$set:{password:req.body.newPassword}},(err,result)=>{
+        console.log(result)
+      })
+      res.json({"message":"Password reset successful"})
+    }
+    else{
+      res.json({"message":"token expires or wrong"})
+    }
+  })
+})
+
 
 module.exports = users

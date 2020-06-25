@@ -371,6 +371,4 @@ users.post('/resetpassword',(req,res)=>{
     }
   })
 })
-
-
 module.exports = users

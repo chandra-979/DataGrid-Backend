@@ -9,7 +9,7 @@
     "email-existence": "^0.1.6",
     "email-exists": "^0.2.1",
     "express": "^4.17.1",
-    "express-jwt": "^5.3.3",
+    "express-jwt": "^6.0.0",
     "fs": "0.0.1-security",
     "gridfs-stream": "^1.1.1",
     "ip": "^1.1.5",

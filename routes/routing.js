@@ -12,6 +12,7 @@ const crypto = require('crypto')
 const nodemailer=require('nodemailer')
 const User = require('../models/model')
 const { ok } = require('assert');
+const config = require('../config.json');
 
 users.use(cors())
 var id;
@@ -122,10 +123,10 @@ users.post('/upload', (req, res) => {
   }
  
 var decoded = jwt.verify(req.headers.authorization.split(' ')[0], process.env.SECRET_KEY)
-const mongoURI = 'mongodb://localhost:27017/Mydb';
+
 
 // Create mongo connection
-const conn = mongoose.createConnection(mongoURI);
+const conn = mongoose.createConnection(process.env.MONGODB_URI || config.connectionString);
 
 // Init gfs
 let gfs;
@@ -179,7 +180,7 @@ users.post('/file',(req, res,) => {
 
   let fileName = req.body.filename;  
   
-    MongoClient.connect('mongodb://localhost:27017', function(err, client){
+    MongoClient.connect(process.env.MONGODB_URI || config.connectionString, function(err, client){
         if(err){      
           console.log(1)
          res.sendStatus(403)
@@ -235,7 +236,7 @@ users.post("/delete",(req,res)=>{
  
 var decoded = jwt.verify(req.headers.authorization.split(' ')[0], process.env.SECRET_KEY)
 
-  MongoClient.connect('mongodb://localhost:27017', function(err, client){
+  MongoClient.connect(process.env.MONGODB_URI || config.connectionString, function(err, client){
         if(err){      
          res.sendStatus(403)
              } 
@@ -273,7 +274,7 @@ collection.find({'metadata.OriginalName': req.body.filename}).toArray(function(e
 
 users.post('/download', (req, res) => {
   // Check file exist on MongoDB
-  mongoose.connect('mongodb://localhost:27017/Mydb')
+  mongoose.connect(process.env.MONGODB_URI || config.connectionString)
   Grid.mongo=mongoose.mongo
   var connection=mongoose.connection
   connection.on('error',console.error.bind(console,'connection error:'))

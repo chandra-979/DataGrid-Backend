@@ -19,8 +19,6 @@ var id;
 
 process.env.SECRET_KEY = 'secret'
 
-
-
 users.post('/register', (req, res) => {
   const today = new Date()
   const userData = {
@@ -150,7 +148,8 @@ const storage = new GridFsStorage({
         const fileInfo = {
           filename: filename,
           metadata:{userId:decoded._id,OriginalName:file.originalname},
-          bucketName: 'uploads',
+          bucketName: 'uploads'
+          
         };
         User.findByIdAndUpdate(decoded._id,
           {$push: {data: fileInfo}},
@@ -227,6 +226,39 @@ collection.find({filename: fileName}).toArray(function(err, docs){
  });
 });
 
+users.post("/update",(req,res)=>{
+
+  if(req.headers.authorization.split(' ')[0]===null||req.headers.authorization.split(' ')[0]==='null'){
+    res.json({error:'User does not exist'})
+    return 
+  }
+ 
+var decoded = jwt.verify(req.headers.authorization.split(' ')[0], process.env.SECRET_KEY)
+
+User.findOne({
+  _id:decoded._id
+ })
+   .then(user => {
+     if (user) {
+       
+       User.update({_id:decoded._id},{$set:{first_name:req.body.first_name,last_name:req.body.last_name}},(err,resl)=>
+       {
+         if(err)
+         res.sendStatus(403)
+         console.log(resl);
+         res.json({"message":"success"})
+       })
+
+     } else {
+       res.sendStatus(403)
+     }
+   })
+   .catch(err => {
+     res.send('error: ' + err)
+   })
+
+})
+
 
 users.post("/delete",(req,res)=>{
   if(req.headers.authorization.split(' ')[0]===null||req.headers.authorization.split(' ')[0]==='null'){
@@ -271,6 +303,44 @@ collection.find({'metadata.OriginalName': req.body.filename}).toArray(function(e
  });
 
 })
+
+
+users.post("/remove",(req,res)=>{
+
+  if(req.headers.authorization.split(' ')[0]===null||req.headers.authorization.split(' ')[0]==='null'){
+    res.json({error:'User does not exist'})
+    return 
+  }
+ 
+var decoded = jwt.verify(req.headers.authorization.split(' ')[0], process.env.SECRET_KEY)
+
+MongoClient.connect(process.env.MONGODB_URI || config.connectionString, function(err, client){
+  if(err){      
+   res.sendStatus(403)
+       } 
+
+const db = client.db('Mydb');
+const collection = db.collection('uploads.files');    
+const collectionChunks = db.collection('uploads.chunks');
+collection.find({'metadata.OriginalName': req.body.filename}).toArray(function(err, docs){        
+if(err){        
+console.log(1)
+res.sendStatus(403)      
+}
+if(!docs || docs.length === 0){   
+console.log(2)     
+res.sendStatus(403)     
+}else{
+console.log(1)
+User.update({},{$pull:{'data':{'_id':req.body.id}}},(err,resu)=>{
+  console.log(resu)
+});
+res.json("deletion success")
+
+}
+})
+})
+});
 
 users.post('/download', (req, res) => {
   // Check file exist on MongoDB
@@ -320,7 +390,7 @@ users.post('/forgotpassword', function(req, res) {
          service: 'Gmail', 
          auth: {
           user: 'chandra7799225680@gmail.com',
-          pass: 'Chandra@2911'
+          pass: 'Chandra@2598'
         }
       });
 
@@ -328,7 +398,7 @@ users.post('/forgotpassword', function(req, res) {
         if(err)
         console.log('error occur in db')
         else if(!result)
-        res.sendStatus(403).json('User Not Found')
+        res.sendStatus(403)
         else{
           console.log(result)
         console.log("token set to user model")
